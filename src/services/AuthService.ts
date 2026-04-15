@@ -1,9 +1,9 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { IUser } from '../../../shared/globalTypes';
+import { IUser } from '../types';
 
 export class AuthService {
-  private static SECRET = 'seu_segredo_aqui';
+  private static SECRET = process.env.JWT_SECRET || 'default_secret';
 
   async hashPassword(password: string): Promise<string> {
     return bcrypt.hash(password, 10);
@@ -20,7 +20,11 @@ export class AuthService {
     if (!match) return null;
 
     return jwt.sign(
-      { id: user.id! },
+      {
+        id: user.id,
+        email: user.email,
+        nivel_acesso: user.nivel_acesso
+      },
       AuthService.SECRET,
       { expiresIn: '1d' }
     );

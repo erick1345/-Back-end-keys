@@ -3,15 +3,13 @@
     "target": "ESNext",
     "module": "commonjs",
     "rootDir": "..",
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["../shared/*"]
-    },
     "outDir": "./dist",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true, // para não  utilizar any e unknown 
-    "skipLibCheck": true
+    "strict": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "5.0",
+    "types": ["node", "jest"]
   },
-  "include": ["src/**/*", "../shared/**/*.ts"]
+  "include": ["src/**/*", "tests/**/*", "../shared/**/*.ts"]
 }

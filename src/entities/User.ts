@@ -1,4 +1,4 @@
-import { IUser } from '@shared/globalTypes';
+import { IUser } from '../types';
 
 export class User implements IUser {
   constructor(
@@ -6,6 +6,7 @@ export class User implements IUser {
     public email: string,
     public cpf: string,
     public senha?: string,
-    public id?: string
+    public id?: number,
+    public nivel_acesso?: 'admin' | 'cliente'
   ) {}
 }

@@ -6,15 +6,17 @@ export class GameRepository {
 
     const [result]: any = await connection.execute(
       `INSERT INTO jogos 
-      (titulo, descricao, preco, plataforma, estoque, imagem_url)
-      VALUES (?, ?, ?, ?, ?, ?)`,
+      (titulo, descricao, preco, plataforma, estoque, imagem_url, requisitos_minimos, requisitos_recomendados)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         data.titulo,
         data.descricao,
-        data.preco,
+        Number(data.preco),
         data.plataforma,
-        data.estoque,
-        data.imagem_url
+        Number(data.estoque),
+        data.imagem_url,
+        data.requisitos_minimos || null,
+        data.requisitos_recomendados || null
       ]
     );
 
@@ -63,15 +65,17 @@ export class GameRepository {
 
     await connection.execute(
       `UPDATE jogos
-       SET titulo = ?, descricao = ?, preco = ?, plataforma = ?, estoque = ?, imagem_url = ?
+       SET titulo = ?, descricao = ?, preco = ?, plataforma = ?, estoque = ?, imagem_url = ?, requisitos_minimos = ?, requisitos_recomendados = ?
        WHERE id = ?`,
       [
         data.titulo,
         data.descricao,
-        data.preco,
+        Number(data.preco),
         data.plataforma,
-        data.estoque,
+        Number(data.estoque),
         data.imagem_url,
+        data.requisitos_minimos || null,
+        data.requisitos_recomendados || null,
         id
       ]
     );
@@ -88,5 +92,47 @@ export class GameRepository {
     );
 
     return true;
+  }
+
+  async getDashboardStats() {
+    const connection = Database.getConnection();
+
+    const [statsRows]: any = await connection.execute(`
+      SELECT 
+        COUNT(*) AS totalJogos,
+        COALESCE(SUM(preco * estoque), 0) AS valorEstoque,
+        COUNT(CASE WHEN estoque <= 5 THEN 1 END) AS estoqueBaixo
+      FROM jogos
+    `);
+
+    const [ultimosJogos]: any = await connection.execute(`
+      SELECT id, titulo, preco, estoque
+      FROM jogos
+      ORDER BY id DESC
+      LIMIT 6
+    `);
+
+    const [ranking]: any = await connection.execute(`
+      SELECT titulo, estoque
+      FROM jogos
+      ORDER BY estoque ASC, titulo ASC
+      LIMIT 5
+    `);
+
+    const [estoqueGrafico]: any = await connection.execute(`
+      SELECT id, titulo, estoque
+      FROM jogos
+      ORDER BY estoque ASC, titulo ASC
+      LIMIT 10
+    `);
+
+    return {
+      totalJogos: Number(statsRows[0].totalJogos || 0),
+      valorEstoque: Number(statsRows[0].valorEstoque || 0),
+      estoqueBaixo: Number(statsRows[0].estoqueBaixo || 0),
+      ultimosJogos,
+      ranking,
+      estoqueGrafico
+    };
   }
 }
