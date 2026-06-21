@@ -28,11 +28,11 @@ export class GameRepository {
 
   async listAll(page: number = 1, limit: number = 10) {
     const connection = Database.getConnection();
-    const offset = (page - 1) * limit;
+    const limitInt = parseInt(String(limit), 10);
+    const offsetInt = parseInt(String((page - 1) * limit), 10);
 
-    const [games]: any = await connection.execute(
-      `SELECT * FROM jogos ORDER BY id ASC LIMIT ? OFFSET ?`,
-      [limit, offset]
+    const [games]: any = await connection.query(
+      `SELECT * FROM jogos ORDER BY id ASC LIMIT ${limitInt} OFFSET ${offsetInt}`
     );
 
     const [countResult]: any = await connection.execute(
@@ -54,7 +54,7 @@ export class GameRepository {
 
     const [rows]: any = await connection.execute(
       `SELECT * FROM jogos WHERE id = ?`,
-      [id]
+      [Number(id)]
     );
 
     return rows[0] || null;
@@ -76,7 +76,7 @@ export class GameRepository {
         data.imagem_url,
         data.requisitos_minimos || null,
         data.requisitos_recomendados || null,
-        id
+        Number(id)
       ]
     );
 
@@ -88,7 +88,7 @@ export class GameRepository {
 
     await connection.execute(
       `DELETE FROM jogos WHERE id = ?`,
-      [id]
+      [Number(id)]
     );
 
     return true;

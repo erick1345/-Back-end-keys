@@ -197,6 +197,184 @@ app.put('/users/profile', authMiddleware, async (req: any, res) => {
   }
 });
 
+// ===== ADMIN: CRUD DE USUÁRIOS =====
+
+// LISTAR USUÁRIOS
+app.get('/admin/users', authMiddleware, adminMiddleware, async (_req, res) => {
+  try {
+    const users = await userRepository.listAll();
+
+    return res.json(users);
+  } catch (error) {
+    console.error('Erro ao listar usuários:', error);
+
+    return res.status(500).json({
+      message: 'Erro ao listar usuários'
+    });
+  }
+});
+
+// BUSCAR USUÁRIO POR ID
+app.get('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const user = await userRepository.findById(Number(req.params.id));
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'Usuário não encontrado'
+      });
+    }
+
+    return res.json(user);
+  } catch (error) {
+    console.error('Erro ao buscar usuário:', error);
+
+    return res.status(500).json({
+      message: 'Erro ao buscar usuário'
+    });
+  }
+});
+
+// CRIAR USUÁRIO (admin)
+app.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { nome, email, cpf, senha, nivel_acesso } = req.body;
+
+    if (!nome || !email || !cpf || !senha) {
+      return res.status(400).json({
+        message: 'Todos os campos são obrigatórios'
+      });
+    }
+
+    if (!Validators.isEmailValid(email)) {
+      return res.status(400).json({
+        message: 'Email inválido'
+      });
+    }
+
+    if (!CpfValidator.isValid(cpf)) {
+      return res.status(400).json({
+        message: 'CPF inválido'
+      });
+    }
+
+    if (!Validators.isPasswordStrong(senha)) {
+      return res.status(400).json({
+        message: 'A senha deve ter no mínimo 8 caracteres e 1 número'
+      });
+    }
+
+    if (nivel_acesso && nivel_acesso !== 'admin' && nivel_acesso !== 'cliente') {
+      return res.status(400).json({
+        message: 'Nível de acesso inválido'
+      });
+    }
+
+    const existingUser = await userRepository.findByEmail(email);
+
+    if (existingUser) {
+      return res.status(400).json({
+        message: 'Email já cadastrado'
+      });
+    }
+
+    const hashedSenha = await authService.hashPassword(senha);
+
+    await userRepository.create({
+      nome,
+      email,
+      cpf: cpf.replace(/\D/g, ''),
+      senha: hashedSenha,
+      nivel_acesso: nivel_acesso || 'cliente'
+    });
+
+    const created = await userRepository.findByEmail(email);
+
+    return res.status(201).json({
+      id: created?.id,
+      nome: created?.nome,
+      email: created?.email,
+      cpf: created?.cpf,
+      nivel_acesso: created?.nivel_acesso
+    });
+  } catch (error) {
+    console.error('Erro ao criar usuário:', error);
+
+    return res.status(500).json({
+      message: 'Erro ao criar usuário'
+    });
+  }
+});
+
+// EDITAR USUÁRIO (admin)
+app.put('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { nome, nivel_acesso } = req.body;
+
+    if (!nome || !nome.trim()) {
+      return res.status(400).json({
+        message: 'Nome é obrigatório'
+      });
+    }
+
+    if (nivel_acesso && nivel_acesso !== 'admin' && nivel_acesso !== 'cliente') {
+      return res.status(400).json({
+        message: 'Nível de acesso inválido'
+      });
+    }
+
+    const existing = await userRepository.findById(Number(req.params.id));
+
+    if (!existing) {
+      return res.status(404).json({
+        message: 'Usuário não encontrado'
+      });
+    }
+
+    await userRepository.adminUpdate(
+      Number(req.params.id),
+      nome.trim(),
+      nivel_acesso || existing.nivel_acesso || 'cliente'
+    );
+
+    const updated = await userRepository.findById(Number(req.params.id));
+
+    return res.json({
+      message: 'Usuário atualizado com sucesso',
+      user: updated
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar usuário:', error);
+
+    return res.status(500).json({
+      message: 'Erro ao atualizar usuário'
+    });
+  }
+});
+
+// EXCLUIR USUÁRIO (admin)
+app.delete('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const removed = await userRepository.delete(Number(req.params.id));
+
+    if (!removed) {
+      return res.status(404).json({
+        message: 'Usuário não encontrado'
+      });
+    }
+
+    return res.json({
+      message: 'Usuário removido com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao excluir usuário:', error);
+
+    return res.status(500).json({
+      message: 'Erro ao excluir usuário'
+    });
+  }
+});
+
 // LISTAR JOGOS
 const listarJogos = async (req: any, res: any) => {
   try {

@@ -5,7 +5,8 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only --ignore-watch node_modules src/index.ts",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
@@ -21,6 +22,8 @@
     "typescript": "^5.9.3"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
@@ -28,6 +31,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.3.3",
     "@types/supertest": "^7.2.0",
+    "husky": "^9.1.7",
     "jest": "^30.3.0",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.9"
