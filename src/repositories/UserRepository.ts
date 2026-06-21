@@ -1,6 +1,6 @@
 import { Database } from '../database/Database';
 import { IUser } from '../types';
-import { RowDataPacket } from 'mysql2';
+import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 export class UserRepository {
   private db = Database.getConnection();
@@ -57,6 +57,47 @@ export class UserRepository {
     );
 
     return rows.length > 0 ? (rows[0] as IUser) : null;
+  }
+
+  async listAll(): Promise<IUser[]> {
+    const [rows] = await this.db.execute<RowDataPacket[]>(
+      `
+      SELECT id, nome, email, cpf, nivel_acesso, created_at
+      FROM usuarios
+      ORDER BY id ASC
+      `
+    );
+
+    return rows as IUser[];
+  }
+
+  async adminUpdate(
+    id: number,
+    nome: string,
+    nivelAcesso: 'admin' | 'cliente'
+  ): Promise<boolean> {
+    const [result] = await this.db.execute<ResultSetHeader>(
+      `
+      UPDATE usuarios
+      SET nome = ?, nivel_acesso = ?
+      WHERE id = ?
+      `,
+      [nome, nivelAcesso, id]
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  async delete(id: number): Promise<boolean> {
+    const [result] = await this.db.execute<ResultSetHeader>(
+      `
+      DELETE FROM usuarios
+      WHERE id = ?
+      `,
+      [id]
+    );
+
+    return result.affectedRows > 0;
   }
 
   async updateProfile(userId: number, nome: string, senhaHash?: string): Promise<void> {
