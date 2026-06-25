@@ -44,7 +44,7 @@ app.post('/login', async (req, res) => {
 
     if (!user) {
       return res.status(401).json({
-        message: 'E-mail ou senha incorretos'
+        message: 'E-mail ou senha incorret'
       });
     }
 
