@@ -5,4 +5,5 @@ export interface IUser {
   cpf: string;
   senha?: string;
   nivel_acesso?: 'admin' | 'cliente';
+  foto_url?: string | null;
 }

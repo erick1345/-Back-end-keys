@@ -12,11 +12,15 @@ import { authMiddleware } from './middleware/auth';
 import { adminMiddleware } from './middleware/admin';
 import { Validators } from './utils/Validators';
 import { CpfValidator } from './utils/CpfValidator';
+import multer from 'multer';
+import { uploadImage, UPLOAD_DIR } from './middleware/upload';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+app.use('/uploads', express.static(UPLOAD_DIR));
 
 const userRepository = new UserRepository();
 const gameRepository = new GameRepository();
@@ -62,7 +66,8 @@ app.post('/login', async (req, res) => {
         nome: user.nome,
         email: user.email,
         cpf: user.cpf,
-        nivel_acesso: user.nivel_acesso
+        nivel_acesso: user.nivel_acesso,
+        foto_url: user.foto_url
       },
       token
     });
@@ -75,7 +80,6 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// REGISTRO
 app.post('/register', async (req, res) => {
   try {
     const { nome, email, cpf, senha } = req.body;
@@ -197,9 +201,38 @@ app.put('/users/profile', authMiddleware, async (req: any, res) => {
   }
 });
 
-// ===== ADMIN: CRUD DE USUÁRIOS =====
+app.post('/users/avatar', authMiddleware, (req: any, res) => {
+  uploadImage.single('imagem')(req, res, (err: any) => {
+    if (err) {
+      const message =
+        err instanceof multer.MulterError
+          ? err.code === 'LIMIT_FILE_SIZE'
+            ? 'Imagem muito grande (maximo 5 MB).'
+            : 'Erro no envio da imagem.'
+          : err.message;
 
-// LISTAR USUÁRIOS
+      return res.status(400).json({ message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Nenhuma imagem enviada.' });
+    }
+
+    const userId = Number(req.user?.id);
+    const fotoUrl = `/uploads/${req.file.filename}`;
+
+    userRepository
+      .updateAvatar(userId, fotoUrl)
+      .then(() => userRepository.findById(userId))
+      .then((user) => res.status(200).json({ user }))
+      .catch((error) => {
+        console.error('Erro ao salvar foto de perfil:', error);
+        res.status(500).json({ message: 'Erro ao salvar a foto.' });
+      });
+  });
+});
+
+
 app.get('/admin/users', authMiddleware, adminMiddleware, async (_req, res) => {
   try {
     const users = await userRepository.listAll();
@@ -214,7 +247,7 @@ app.get('/admin/users', authMiddleware, adminMiddleware, async (_req, res) => {
   }
 });
 
-// BUSCAR USUÁRIO POR ID
+
 app.get('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const user = await userRepository.findById(Number(req.params.id));
@@ -235,7 +268,6 @@ app.get('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-// CRIAR USUÁRIO (admin)
 app.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { nome, email, cpf, senha, nivel_acesso } = req.body;
@@ -306,7 +338,6 @@ app.post('/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-// EDITAR USUÁRIO (admin)
 app.put('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { nome, nivel_acesso } = req.body;
@@ -352,7 +383,6 @@ app.put('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
-// EXCLUIR USUÁRIO (admin)
 app.delete('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const removed = await userRepository.delete(Number(req.params.id));
@@ -375,7 +405,27 @@ app.delete('/admin/users/:id', authMiddleware, adminMiddleware, async (req, res)
   }
 });
 
-// LISTAR JOGOS
+
+app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
+  uploadImage.single('imagem')(req, res, (err: any) => {
+    if (err) {
+      const message =
+        err instanceof multer.MulterError
+          ? err.code === 'LIMIT_FILE_SIZE'
+            ? 'Imagem muito grande (maximo 5 MB).'
+            : 'Erro no envio da imagem.'
+          : err.message;
+
+      return res.status(400).json({ message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Nenhuma imagem enviada.' });
+    }
+    return res.status(201).json({ url: `/uploads/${req.file.filename}` });
+  });
+});
+
 const listarJogos = async (req: any, res: any) => {
   try {
     const page = Number(req.query.page) || 1;
@@ -396,7 +446,6 @@ const listarJogos = async (req: any, res: any) => {
 app.get('/jogos', listarJogos);
 app.get('/games', listarJogos);
 
-// BUSCAR JOGO POR ID
 app.get('/jogos/:id', async (req, res) => {
   try {
     const game = await gameRepository.findById(Number(req.params.id));
@@ -437,7 +486,6 @@ app.get('/games/:id', async (req, res) => {
   }
 });
 
-// CRIAR JOGO
 app.post('/jogos', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const novoJogo = await gameRepository.create(req.body);
@@ -465,8 +513,6 @@ app.post('/games', authMiddleware, adminMiddleware, async (req, res) => {
     });
   }
 });
-
-// EDITAR JOGO
 app.put('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const jogo = await gameRepository.update(
@@ -501,7 +547,6 @@ app.put('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-// EXCLUIR JOGO
 app.delete('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     await gameRepository.delete(Number(req.params.id));
@@ -534,7 +579,6 @@ app.delete('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
   }
 });
 
-// DASHBOARD ADMIN
 app.get('/dashboard/admin', authMiddleware, adminMiddleware, async (_req, res) => {
   try {
     const stats = await gameRepository.getDashboardStats();
@@ -549,7 +593,6 @@ app.get('/dashboard/admin', authMiddleware, adminMiddleware, async (_req, res) =
   }
 });
 
-// DASHBOARD VENDAS
 app.get('/dashboard/sales', authMiddleware, adminMiddleware, async (_req, res) => {
   try {
     const sales = await purchaseRepository.getSalesStats();
@@ -564,7 +607,6 @@ app.get('/dashboard/sales', authMiddleware, adminMiddleware, async (_req, res) =
   }
 });
 
-// BIBLIOTECA DO USUÁRIO
 app.get('/users/library', authMiddleware, async (req: any, res) => {
   try {
     const userId = req.user?.id;
@@ -605,39 +647,17 @@ app.post('/purchase', authMiddleware, async (req: any, res) => {
       });
     }
 
-    const game = await gameRepository.findById(Number(gameId));
+    const result: any = await purchaseRepository.create(Number(userId), Number(gameId));
 
-    if (!game) {
-      return res.status(404).json({
-        message: 'Jogo não encontrado'
-      });
+    if (result && result.error) {
+      return res.status(result.status ?? 400).json({ message: result.error });
     }
-
-    await purchaseRepository.create(Number(userId), Number(gameId));
 
     return res.status(201).json({
       message: 'Compra registrada com sucesso'
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Erro ao registrar compra:', error);
-
-    if (error.message === 'Jogo não encontrado') {
-      return res.status(404).json({
-        message: error.message
-      });
-    }
-
-    if (error.message === 'Jogo sem estoque') {
-      return res.status(400).json({
-        message: error.message
-      });
-    }
-
-    if (error.message === 'Jogo já adquirido') {
-      return res.status(400).json({
-        message: error.message
-      });
-    }
 
     return res.status(500).json({
       message: 'Erro ao registrar compra'

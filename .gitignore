@@ -14,3 +14,6 @@ npm-debug.log*
 
 # Husky (internos gerados automaticamente)
 .husky/_/
+
+# Imagens enviadas pelo upload (Multer)
+uploads/

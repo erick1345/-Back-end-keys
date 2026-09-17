@@ -23,7 +23,7 @@ export class UserRepository {
   async findByEmail(email: string): Promise<IUser | null> {
     const [rows] = await this.db.execute<RowDataPacket[]>(
       `
-      SELECT id, nome, email, cpf, senha, nivel_acesso
+      SELECT id, nome, email, cpf, senha, nivel_acesso, foto_url
       FROM usuarios
       WHERE email = ?
       `,
@@ -36,7 +36,7 @@ export class UserRepository {
   async findById(id: number): Promise<IUser | null> {
     const [rows] = await this.db.execute<RowDataPacket[]>(
       `
-      SELECT id, nome, email, cpf, nivel_acesso
+      SELECT id, nome, email, cpf, nivel_acesso, foto_url
       FROM usuarios
       WHERE id = ?
       `,
@@ -98,6 +98,17 @@ export class UserRepository {
     );
 
     return result.affectedRows > 0;
+  }
+
+  async updateAvatar(userId: number, fotoUrl: string): Promise<void> {
+    await this.db.execute(
+      `
+      UPDATE usuarios
+      SET foto_url = ?
+      WHERE id = ?
+      `,
+      [fotoUrl, userId]
+    );
   }
 
   async updateProfile(userId: number, nome: string, senhaHash?: string): Promise<void> {
