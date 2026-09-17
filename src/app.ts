@@ -13,7 +13,7 @@ import { adminMiddleware } from './middleware/admin';
 import { Validators } from './utils/Validators';
 import { CpfValidator } from './utils/CpfValidator';
 import multer from 'multer';
-import { uploadImage, UPLOAD_DIR } from './middleware/upload';
+import { uploadImage, UPLOAD_DIR, removeUploadedImage } from './middleware/upload';
 
 const app = express();
 
@@ -222,8 +222,16 @@ app.post('/users/avatar', authMiddleware, (req: any, res) => {
     const fotoUrl = `/uploads/${req.file.filename}`;
 
     userRepository
-      .updateAvatar(userId, fotoUrl)
-      .then(() => userRepository.findById(userId))
+      .findById(userId)
+      .then((anterior) =>
+        userRepository.updateAvatar(userId, fotoUrl).then(() => {
+          // apaga a foto de perfil antiga do disco (se for upload local)
+          if (anterior && anterior.foto_url && anterior.foto_url !== fotoUrl) {
+            removeUploadedImage(anterior.foto_url);
+          }
+          return userRepository.findById(userId);
+        })
+      )
       .then((user) => res.status(200).json({ user }))
       .catch((error) => {
         console.error('Erro ao salvar foto de perfil:', error);
@@ -515,10 +523,15 @@ app.post('/games', authMiddleware, adminMiddleware, async (req, res) => {
 });
 app.put('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const jogo = await gameRepository.update(
-      Number(req.params.id),
-      req.body
-    );
+    const id = Number(req.params.id);
+    const anterior = await gameRepository.findById(id);
+
+    const jogo = await gameRepository.update(id, req.body);
+
+    // se a imagem foi trocada, apaga a antiga do disco (se for upload local)
+    if (anterior && anterior.imagem_url !== req.body.imagem_url) {
+      removeUploadedImage(anterior.imagem_url);
+    }
 
     return res.json(jogo);
   } catch (error) {
@@ -532,10 +545,15 @@ app.put('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
 
 app.put('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const jogo = await gameRepository.update(
-      Number(req.params.id),
-      req.body
-    );
+    const id = Number(req.params.id);
+    const anterior = await gameRepository.findById(id);
+
+    const jogo = await gameRepository.update(id, req.body);
+
+    // se a imagem foi trocada, apaga a antiga do disco (se for upload local)
+    if (anterior && anterior.imagem_url !== req.body.imagem_url) {
+      removeUploadedImage(anterior.imagem_url);
+    }
 
     return res.json(jogo);
   } catch (error) {
@@ -549,7 +567,13 @@ app.put('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
 
 app.delete('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    await gameRepository.delete(Number(req.params.id));
+    const id = Number(req.params.id);
+    const jogo = await gameRepository.findById(id);
+
+    await gameRepository.delete(id);
+
+    // apaga tambem o arquivo da imagem do disco (se for upload local)
+    if (jogo) removeUploadedImage(jogo.imagem_url);
 
     return res.json({
       message: 'Jogo removido com sucesso'
@@ -565,7 +589,13 @@ app.delete('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
 
 app.delete('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    await gameRepository.delete(Number(req.params.id));
+    const id = Number(req.params.id);
+    const jogo = await gameRepository.findById(id);
+
+    await gameRepository.delete(id);
+
+    // apaga tambem o arquivo da imagem do disco (se for upload local)
+    if (jogo) removeUploadedImage(jogo.imagem_url);
 
     return res.json({
       message: 'Jogo removido com sucesso'

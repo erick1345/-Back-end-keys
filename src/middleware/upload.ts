@@ -46,3 +46,19 @@ export const uploadImage = multer({
   fileFilter,
   limits: { fileSize: MAX_FILE_SIZE },
 });
+
+/**
+ * Remove do disco a imagem enviada por upload, se ela for um arquivo local
+ * (caminho "/uploads/..."). Ignora URLs externas (ex: links da Steam) e
+ * eventuais falhas (arquivo ja apagado), para nao atrapalhar a exclusao.
+ */
+export function removeUploadedImage(imagemUrl?: string | null) {
+  if (!imagemUrl || !imagemUrl.startsWith('/uploads/')) return;
+
+  const nomeArquivo = path.basename(imagemUrl); // basename evita path traversal
+  const caminho = path.join(UPLOAD_DIR, nomeArquivo);
+
+  fs.promises.unlink(caminho).catch(() => {
+    // arquivo ja nao existe ou nao pode ser removido: sem problema
+  });
+}
