@@ -14,8 +14,9 @@ import { Validators } from './utils/Validators';
 import { CpfValidator } from './utils/CpfValidator';
 import multer from 'multer';
 import { uploadImage, UPLOAD_DIR, removeUploadedImage } from './middleware/upload';
-import { cacheGet, cacheSet, cacheInvalidate } from './cache/cache';
 import { publicarEvento, CANAIS } from './messaging/events';
+import { GameController } from './controllers/GameController';
+import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 
@@ -436,154 +437,21 @@ app.post('/upload', authMiddleware, adminMiddleware, (req, res) => {
   });
 });
 
-const listarJogos = async (req: any, res: any) => {
-  try {
-    const page = Number(req.query.page) || 1;
-    const limit = Number(req.query.limit) || 10;
-    const cacheKey = `jogos:page:${page}:limit:${limit}`;
+// --- Rotas de jogos: controller fino -> GameService (regra) -> GameRepository (banco) ---
+app.get('/jogos', GameController.listar);
+app.get('/games', GameController.listar);
 
-    // 1) cache-aside: tenta servir do cache primeiro
-    const cacheado = await cacheGet(cacheKey);
-    if (cacheado) {
-      console.log(`[cache] HIT  ${cacheKey}`);
-      res.setHeader('X-Cache', 'HIT');
-      return res.json(cacheado);
-    }
+app.get('/jogos/:id', GameController.detalhar);
+app.get('/games/:id', GameController.detalhar);
 
-    // 2) nao tinha no cache: busca no MySQL
-    console.log(`[cache] MISS ${cacheKey} -> consultando MySQL`);
-    const result = await gameRepository.listAll(page, limit);
+app.post('/jogos', authMiddleware, adminMiddleware, GameController.criar);
+app.post('/games', authMiddleware, adminMiddleware, GameController.criar);
 
-    // 3) guarda no cache com expiracao (TTL) para as proximas requisicoes
-    await cacheSet(cacheKey, result);
-    res.setHeader('X-Cache', 'MISS');
+app.put('/jogos/:id', authMiddleware, adminMiddleware, GameController.atualizar);
+app.put('/games/:id', authMiddleware, adminMiddleware, GameController.atualizar);
 
-    return res.json(result);
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao buscar jogos'
-    });
-  }
-};
-
-app.get('/jogos', listarJogos);
-app.get('/games', listarJogos);
-
-app.get('/jogos/:id', async (req, res) => {
-  try {
-    const game = await gameRepository.findById(Number(req.params.id));
-
-    if (!game) {
-      return res.status(404).json({
-        message: 'Jogo não encontrado'
-      });
-    }
-
-    return res.json(game);
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao buscar jogo'
-    });
-  }
-});
-
-app.get('/games/:id', async (req, res) => {
-  try {
-    const game = await gameRepository.findById(Number(req.params.id));
-
-    if (!game) {
-      return res.status(404).json({
-        message: 'Jogo não encontrado'
-      });
-    }
-
-    return res.json(game);
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao buscar jogo'
-    });
-  }
-});
-
-// --- CRUD de jogos (handlers compartilhados por /jogos e /games) ---
-// Toda escrita invalida o cache de listagem (jogos:*) para refletir a mudanca na hora.
-
-const criarJogo = async (req: any, res: any) => {
-  try {
-    const novoJogo = await gameRepository.create(req.body);
-
-    const n = await cacheInvalidate('jogos:*');
-    console.log(`[cache] invalidado (${n} chaves) apos criar jogo`);
-
-    await publicarEvento(CANAIS.JOGO_CRIADO, { id: novoJogo?.id, titulo: req.body.titulo });
-
-    return res.status(201).json(novoJogo);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Erro ao criar jogo' });
-  }
-};
-
-const atualizarJogo = async (req: any, res: any) => {
-  try {
-    const id = Number(req.params.id);
-    const anterior = await gameRepository.findById(id);
-
-    const jogo = await gameRepository.update(id, req.body);
-
-    // se a imagem foi trocada, apaga a antiga do disco (se for upload local)
-    if (anterior && anterior.imagem_url !== req.body.imagem_url) {
-      removeUploadedImage(anterior.imagem_url);
-    }
-
-    const n = await cacheInvalidate('jogos:*');
-    console.log(`[cache] invalidado (${n} chaves) apos atualizar jogo ${id}`);
-
-    await publicarEvento(CANAIS.JOGO_ATUALIZADO, { id, titulo: req.body.titulo });
-
-    return res.json(jogo);
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Erro ao atualizar jogo' });
-  }
-};
-
-const removerJogo = async (req: any, res: any) => {
-  try {
-    const id = Number(req.params.id);
-    const jogo = await gameRepository.findById(id);
-
-    await gameRepository.delete(id);
-
-    // apaga tambem o arquivo da imagem do disco (se for upload local)
-    if (jogo) removeUploadedImage(jogo.imagem_url);
-
-    const n = await cacheInvalidate('jogos:*');
-    console.log(`[cache] invalidado (${n} chaves) apos remover jogo ${id}`);
-
-    await publicarEvento(CANAIS.JOGO_REMOVIDO, { id });
-
-    return res.json({ message: 'Jogo removido com sucesso' });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Erro ao excluir jogo' });
-  }
-};
-
-app.post('/jogos', authMiddleware, adminMiddleware, criarJogo);
-app.post('/games', authMiddleware, adminMiddleware, criarJogo);
-
-app.put('/jogos/:id', authMiddleware, adminMiddleware, atualizarJogo);
-app.put('/games/:id', authMiddleware, adminMiddleware, atualizarJogo);
-
-app.delete('/jogos/:id', authMiddleware, adminMiddleware, removerJogo);
-app.delete('/games/:id', authMiddleware, adminMiddleware, removerJogo);
+app.delete('/jogos/:id', authMiddleware, adminMiddleware, GameController.remover);
+app.delete('/games/:id', authMiddleware, adminMiddleware, GameController.remover);
 
 app.get('/dashboard/admin', authMiddleware, adminMiddleware, async (_req, res) => {
   try {
@@ -672,5 +540,8 @@ app.post('/purchase', authMiddleware, async (req: any, res) => {
     });
   }
 });
+
+// Tratamento de erros centralizado (ultimo middleware)
+app.use(errorHandler);
 
 export { app };
