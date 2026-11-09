@@ -15,6 +15,7 @@ import { CpfValidator } from './utils/CpfValidator';
 import multer from 'multer';
 import { uploadImage, UPLOAD_DIR, removeUploadedImage } from './middleware/upload';
 import { cacheGet, cacheSet, cacheInvalidate } from './cache/cache';
+import { publicarEvento, CANAIS } from './messaging/events';
 
 const app = express();
 
@@ -520,6 +521,8 @@ const criarJogo = async (req: any, res: any) => {
     const n = await cacheInvalidate('jogos:*');
     console.log(`[cache] invalidado (${n} chaves) apos criar jogo`);
 
+    await publicarEvento(CANAIS.JOGO_CRIADO, { id: novoJogo?.id, titulo: req.body.titulo });
+
     return res.status(201).json(novoJogo);
   } catch (error) {
     console.error(error);
@@ -542,6 +545,8 @@ const atualizarJogo = async (req: any, res: any) => {
     const n = await cacheInvalidate('jogos:*');
     console.log(`[cache] invalidado (${n} chaves) apos atualizar jogo ${id}`);
 
+    await publicarEvento(CANAIS.JOGO_ATUALIZADO, { id, titulo: req.body.titulo });
+
     return res.json(jogo);
   } catch (error) {
     console.error(error);
@@ -561,6 +566,8 @@ const removerJogo = async (req: any, res: any) => {
 
     const n = await cacheInvalidate('jogos:*');
     console.log(`[cache] invalidado (${n} chaves) apos remover jogo ${id}`);
+
+    await publicarEvento(CANAIS.JOGO_REMOVIDO, { id });
 
     return res.json({ message: 'Jogo removido com sucesso' });
   } catch (error) {
@@ -651,6 +658,8 @@ app.post('/purchase', authMiddleware, async (req: any, res) => {
     if (result && result.error) {
       return res.status(result.status ?? 400).json({ message: result.error });
     }
+
+    await publicarEvento(CANAIS.COMPRA_REALIZADA, { userId, gameId: Number(gameId) });
 
     return res.status(201).json({
       message: 'Compra registrada com sucesso'
