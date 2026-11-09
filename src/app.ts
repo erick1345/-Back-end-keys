@@ -17,6 +17,8 @@ import { uploadImage, UPLOAD_DIR, removeUploadedImage } from './middleware/uploa
 import { publicarEvento, CANAIS } from './messaging/events';
 import { GameController } from './controllers/GameController';
 import { errorHandler } from './middleware/errorHandler';
+import swaggerUi from 'swagger-ui-express';
+import { openapiSpec } from './docs/openapi';
 
 const app = express();
 
@@ -24,6 +26,10 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+// Documentacao da API: Swagger UI em /docs e o documento OpenAPI em /openapi.json
+app.get('/openapi.json', (_req, res) => res.json(openapiSpec));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec as any));
 
 const userRepository = new UserRepository();
 const gameRepository = new GameRepository();
