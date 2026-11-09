@@ -14,6 +14,7 @@ import { Validators } from './utils/Validators';
 import { CpfValidator } from './utils/CpfValidator';
 import multer from 'multer';
 import { uploadImage, UPLOAD_DIR, removeUploadedImage } from './middleware/upload';
+import { cacheGet, cacheSet, cacheInvalidate } from './cache/cache';
 
 const app = express();
 
@@ -438,8 +439,23 @@ const listarJogos = async (req: any, res: any) => {
   try {
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
+    const cacheKey = `jogos:page:${page}:limit:${limit}`;
 
+    // 1) cache-aside: tenta servir do cache primeiro
+    const cacheado = await cacheGet(cacheKey);
+    if (cacheado) {
+      console.log(`[cache] HIT  ${cacheKey}`);
+      res.setHeader('X-Cache', 'HIT');
+      return res.json(cacheado);
+    }
+
+    // 2) nao tinha no cache: busca no MySQL
+    console.log(`[cache] MISS ${cacheKey} -> consultando MySQL`);
     const result = await gameRepository.listAll(page, limit);
+
+    // 3) guarda no cache com expiracao (TTL) para as proximas requisicoes
+    await cacheSet(cacheKey, result);
+    res.setHeader('X-Cache', 'MISS');
 
     return res.json(result);
   } catch (error) {
@@ -494,34 +510,24 @@ app.get('/games/:id', async (req, res) => {
   }
 });
 
-app.post('/jogos', authMiddleware, adminMiddleware, async (req, res) => {
+// --- CRUD de jogos (handlers compartilhados por /jogos e /games) ---
+// Toda escrita invalida o cache de listagem (jogos:*) para refletir a mudanca na hora.
+
+const criarJogo = async (req: any, res: any) => {
   try {
     const novoJogo = await gameRepository.create(req.body);
+
+    const n = await cacheInvalidate('jogos:*');
+    console.log(`[cache] invalidado (${n} chaves) apos criar jogo`);
 
     return res.status(201).json(novoJogo);
   } catch (error) {
     console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao criar jogo'
-    });
+    return res.status(500).json({ message: 'Erro ao criar jogo' });
   }
-});
+};
 
-app.post('/games', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const novoJogo = await gameRepository.create(req.body);
-
-    return res.status(201).json(novoJogo);
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao criar jogo'
-    });
-  }
-});
-app.put('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
+const atualizarJogo = async (req: any, res: any) => {
   try {
     const id = Number(req.params.id);
     const anterior = await gameRepository.findById(id);
@@ -533,39 +539,17 @@ app.put('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
       removeUploadedImage(anterior.imagem_url);
     }
 
-    return res.json(jogo);
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao atualizar jogo'
-    });
-  }
-});
-
-app.put('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const anterior = await gameRepository.findById(id);
-
-    const jogo = await gameRepository.update(id, req.body);
-
-    // se a imagem foi trocada, apaga a antiga do disco (se for upload local)
-    if (anterior && anterior.imagem_url !== req.body.imagem_url) {
-      removeUploadedImage(anterior.imagem_url);
-    }
+    const n = await cacheInvalidate('jogos:*');
+    console.log(`[cache] invalidado (${n} chaves) apos atualizar jogo ${id}`);
 
     return res.json(jogo);
   } catch (error) {
     console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao atualizar jogo'
-    });
+    return res.status(500).json({ message: 'Erro ao atualizar jogo' });
   }
-});
+};
 
-app.delete('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
+const removerJogo = async (req: any, res: any) => {
   try {
     const id = Number(req.params.id);
     const jogo = await gameRepository.findById(id);
@@ -575,39 +559,24 @@ app.delete('/jogos/:id', authMiddleware, adminMiddleware, async (req, res) => {
     // apaga tambem o arquivo da imagem do disco (se for upload local)
     if (jogo) removeUploadedImage(jogo.imagem_url);
 
-    return res.json({
-      message: 'Jogo removido com sucesso'
-    });
+    const n = await cacheInvalidate('jogos:*');
+    console.log(`[cache] invalidado (${n} chaves) apos remover jogo ${id}`);
+
+    return res.json({ message: 'Jogo removido com sucesso' });
   } catch (error) {
     console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao excluir jogo'
-    });
+    return res.status(500).json({ message: 'Erro ao excluir jogo' });
   }
-});
+};
 
-app.delete('/games/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const jogo = await gameRepository.findById(id);
+app.post('/jogos', authMiddleware, adminMiddleware, criarJogo);
+app.post('/games', authMiddleware, adminMiddleware, criarJogo);
 
-    await gameRepository.delete(id);
+app.put('/jogos/:id', authMiddleware, adminMiddleware, atualizarJogo);
+app.put('/games/:id', authMiddleware, adminMiddleware, atualizarJogo);
 
-    // apaga tambem o arquivo da imagem do disco (se for upload local)
-    if (jogo) removeUploadedImage(jogo.imagem_url);
-
-    return res.json({
-      message: 'Jogo removido com sucesso'
-    });
-  } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: 'Erro ao excluir jogo'
-    });
-  }
-});
+app.delete('/jogos/:id', authMiddleware, adminMiddleware, removerJogo);
+app.delete('/games/:id', authMiddleware, adminMiddleware, removerJogo);
 
 app.get('/dashboard/admin', authMiddleware, adminMiddleware, async (_req, res) => {
   try {
