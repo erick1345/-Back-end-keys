@@ -1,0 +1,78 @@
+name: CI/CD
+
+# Pipeline esqueleto: build -> test -> deploy
+on:
+  push:
+    branches: [dev, main, master]
+  pull_request:
+
+jobs:
+  build-e-test:
+    name: Build e Testes
+    runs-on: ubuntu-latest
+
+    # Banco de testes (o cache/mensageria Redis nao sobe em teste)
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: keys-forge
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: root
+      DB_NAME: keys-forge
+      JWT_SECRET: ci-secret-apenas-para-testes
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Build (type-check)
+        run: npx tsc --noEmit
+
+      - name: Instalar cliente MySQL
+        run: sudo apt-get update && sudo apt-get install -y default-mysql-client
+
+      - name: Importar schema no banco de testes
+        run: mysql -h 127.0.0.1 -u root -proot keys-forge < db/init.sql
+
+      - name: Rodar testes
+        run: npm test
+
+  deploy:
+    name: Deploy (esqueleto)
+    needs: build-e-test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Passos de deploy (placeholder)
+        run: |
+          echo "Esqueleto de deploy — aqui entrariam os passos reais:"
+          echo " 1) docker build -t playhub-backend ."
+          echo " 2) docker push <registry>/playhub-backend:latest"
+          echo " 3) no servidor: docker compose pull && docker compose up -d"
+          echo "Estrategia: deploy simples com rollback via tag anterior (ver docs/arquitetura)."
